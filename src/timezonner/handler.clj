@@ -7,7 +7,8 @@
             [compojure.route :as route]
             [taoensso.timbre :as timbre]
             [taoensso.timbre.appenders.3rd-party.rotor :as rotor]
-            [selmer.parser :as parser]
+            [selmer.parser :as parser]            
+            [buddy.auth.middleware :refer [wrap-authentication]]
             [environ.core :refer [env]]))
 
 (defn init
@@ -39,8 +40,8 @@
 
 (def app-routes
   (routes
-    (var service-routes)
-    (wrap-routes #'home-routes middleware/wrap-csrf)
+    (middleware/wrap-auth-routes #'service-routes)
+    (var home-routes)
     (route/not-found
       (:body
         (error-page {:status 404

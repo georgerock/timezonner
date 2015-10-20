@@ -15,6 +15,11 @@ WHERE id = :id
 SELECT * FROM users
 WHERE id = :id
 
+-- name: get-user-by-email
+-- retrieve a user given the id.
+SELECT * FROM users
+WHERE email = :email
+
 -- name: get-users
 -- retrieves all users
 SELECT * FROM users
@@ -44,6 +49,10 @@ WHERE id = :id
 -- name: get-timezones
 -- retrieves all timezones.
 SELECT * FROM timezones
+
+-- name: get-timezones-by-user
+-- retrieves all timezones for a specific user.
+SELECT * FROM timezones WHERE addedby = :addedby
 
 -- name: delete-timezone!
 -- delete a timezone given the id

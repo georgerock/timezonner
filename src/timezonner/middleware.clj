@@ -4,18 +4,17 @@
             [environ.core :refer [env]]
             [selmer.middleware :refer [wrap-error-page]]
             [prone.middleware :refer [wrap-exceptions]]
-            [ring.middleware.flash :refer [wrap-flash]]
-            [immutant.web.middleware :refer [wrap-session]]
             [ring.middleware.reload :as reload]
             [ring.middleware.webjars :refer [wrap-webjars]]
             [ring.middleware.defaults :refer [site-defaults wrap-defaults]]
             [ring.middleware.anti-forgery :refer [wrap-anti-forgery]]
             [ring.middleware.format :refer [wrap-restful-format]]
-            [ring.middleware.anti-forgery :refer [wrap-anti-forgery]]
-            [buddy.auth.middleware :refer [wrap-authentication]]
-            [buddy.auth.backends.session :refer [session-backend]]
-            [buddy.auth.accessrules :refer [restrict]]
+            [buddy.auth.backends.token :refer [jws-backend]]
+            [buddy.sign.jws :as jws]
             [buddy.auth :refer [authenticated?]]
+            [buddy.core.nonce :as nonce]
+            [clj-time.core :as time]
+            [ring.util.http-response :refer [unauthorized]]
             [timezonner.layout :refer [*identity*]])
   (:import [javax.servlet ServletContext]))
 
@@ -52,44 +51,35 @@
         wrap-exceptions)
     handler))
 
-(defn wrap-csrf [handler]
-  (wrap-anti-forgery
-    handler
-    {:error-response
-     (error-page
-       {:status 403
-        :title "Invalid anti-forgery token"})}))
-
 (defn wrap-formats [handler]
   (wrap-restful-format handler {:formats [:json-kw :transit-json :transit-msgpack]}))
 
-(defn on-error [request response]
-  (error-page
-    {:status 403
-     :title (str "Access to " (:uri request) " is not authorized")}))
-
-(defn wrap-restricted [handler]
-  (restrict handler {:handler authenticated?
-                     :on-error on-error}))
-
-(defn wrap-identity [handler]
-  (fn [request]
-    (binding [*identity* (get-in request [:session :identity])]
-      (handler request))))
+(def secret "yourDirtyOne")
+(def auth-backend (jws-backend {:secret secret}))
 
 (defn wrap-auth [handler]
-  (-> handler
-      wrap-identity
-      (wrap-authentication (session-backend))))
+  (fn [request]
+    (if (authenticated? request)
+      (handler request)
+      (unauthorized {:error "Invalid Token"}))))
+
+(defn wrap-auth-routes [handler]
+  (fn [request]
+    (let [auth-header (get (:headers request) "authorization")]
+      (handler (assoc request 
+                 :identity (if auth-header 
+                             (try (jws/unsign auth-header secret) 
+                               (catch clojure.lang.ExceptionInfo e nil))
+                             nil))))))
+
+(defn get-token [user]
+  (jws/sign user secret))
 
 (defn wrap-base [handler]
   (-> handler
       wrap-dev
-      wrap-auth
       wrap-formats
       wrap-webjars
-      wrap-flash
-      (wrap-session {:cookie-attrs {:http-only true}})
       (wrap-defaults
         (-> site-defaults
             (assoc-in [:security :anti-forgery] false)
