@@ -185,5 +185,5 @@
             (if-let [usr (first (db/get-user-by-email {:email email}))]
               (if (hashers/check password (:pass usr))
                 (ok {:token (get-token usr)})
-                (ok nil))
-              (ok nil)))))
+                (not-found []))
+              (not-found [])))))
