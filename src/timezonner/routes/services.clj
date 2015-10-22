@@ -4,7 +4,26 @@
             [schema.core :as s]
             [timezonner.db.core :as db]
             [timezonner.middleware :refer [auth-backend wrap-auth get-token]]
-            [buddy.hashers :as hashers]))
+            [buddy.hashers :as hashers]
+            [clojure.string :as st]))
+
+(defn escape-html
+  "Change special characters into HTML character entities."
+  [text]
+  (.. ^String text
+    (replace "&"  "&amp;")
+    (replace "<"  "&lt;")
+    (replace ">"  "&gt;")
+    (replace "\"" "&quot;")
+    (replace "'" "&#39;")))
+
+(defn filter-sec [entity]
+  (into {} (map 
+             #(let [[k v] %1] 
+                (if (string? v) 
+                  [k (escape-html v)] 
+                  [k v])) 
+             entity)))
 
 (s/defschema Timezone {:id (s/maybe Long)
                       :name String
@@ -22,6 +41,9 @@
                       :email String
                       :pass (s/maybe String)
                       :isadmin (s/maybe Boolean)})
+(s/defschema UserRegister {:name String
+                      :email String
+                      :pass (s/maybe String)})
 
 (defapi service-routes
   (ring.swagger.ui/swagger-ui
@@ -53,9 +75,9 @@
                    :summary  "Creates a timezone from a submited JSON"                         
                    (let [logged-id (get-in request [:identity :id])]
                      (if (db/create-timezone! 
-                         (merge (select-keys tzone (keys Timezone)) 
+                          (merge (select-keys (filter-sec tzone) (keys Timezone)) 
                                 {:addedby logged-id}))
-                       (created tzone)
+                       (created (filter-sec tzone))
                        (bad-request))))
             
             (GET* "/:id" {:as request}
@@ -87,8 +109,8 @@
                             (not= logged-id (:addedby full-zone))))
                       (not-found "No such timezone")
                       (if (db/update-timezone! 
-                              (merge (select-keys tzone (keys TimezoneCreate)) {:id id}))
-                         (ok (merge tzone {:id id}))
+                              (merge (select-keys (filter-sec tzone) (keys TimezoneCreate)) {:id id}))
+                         (ok (merge (filter-sec tzone) {:id id}))
                          (bad-request)))))
             
             (DELETE* "/:id" {:as request}
@@ -131,10 +153,9 @@
                    :body     [usr (s/maybe UserCreate)]
                    :summary  "Creates a user from a submited JSON"
                    (if (db/create-user! 
-                         (merge (select-keys usr (keys UserCreate)) 
-                                {:addedby 1 
-                                 :pass (hashers/encrypt (:pass usr))}))
-                     (created usr)
+                         (merge (select-keys (filter-sec usr) (keys UserCreate)) 
+                                {:pass (hashers/encrypt (:pass usr))}))
+                     (created (filter-sec usr))
                      (bad-request)))
             
             (GET* "/:id" {:as request}
@@ -186,4 +207,16 @@
               (if (hashers/check password (:pass usr))
                 (ok {:token (get-token usr)})
                 (not-found []))
-              (not-found [])))))
+              (not-found [])))
+    
+    (POST* "/register" {:as request}
+                   :tags ["Security"]
+                   :return   (s/maybe User)
+                   :body     [usr (s/maybe UserRegister)]
+                   :summary  "Registers a user from a submited JSON"
+                   (if (db/create-user! 
+                         (merge (select-keys (filter-sec usr) (keys UserCreate)) 
+                                {:isadmin 0 
+                                 :pass (hashers/encrypt (:pass usr))}))
+                     (created (filter-sec usr))
+                     (bad-request)))))
