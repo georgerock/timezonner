@@ -1,4 +1,4 @@
--- name: create-user!
+-- name: create-user<!
 -- creates a new user record
 INSERT INTO users
 (name, email, pass, isadmin)
@@ -29,7 +29,7 @@ SELECT * FROM users
 DELETE FROM users
 WHERE id = :id
 
--- name: create-timezone!
+-- name: create-timezone<!
 -- creates a new timezone record
 INSERT INTO timezones
 (name, city, offset, addedby)

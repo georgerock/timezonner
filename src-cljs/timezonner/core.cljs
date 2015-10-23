@@ -44,7 +44,8 @@
                  :method :post
                  :body (.stringify js/JSON (clj->js data))
                  :headers {:content-type "application/json; charset=UTF-8" 
-                           :accept "application/json"}
+                           :accept "application/json"
+                           :authorization (session/get :login-token)}
                  :response-format (json-response-format)
                  :handler handler}))
 
@@ -118,6 +119,13 @@
    {:type type :id id
     :on-change handler}])
 
+(defn sel [id handler]
+  [:select.form-control 
+   {:id id
+    :on-change handler}
+   [:option {:value 1} "Yes"]
+   [:option {:value 0} "No"]])
+
 (defn horz-input [label type id handler]
   [:div.form-group
    [:label.col-sm-2.control-label label]
@@ -126,20 +134,68 @@
 (defn inline-input [label type id handler]
   [:div.form-group
     [:label label]
-    (input type id handler)])
+    (if (= type :select)
+      (sel id handler)
+      (input type id handler))])
 
-(defn tz-add-form []  
-  [:form.form-inline
-   [:div.form-group
-    [:label "Name: "]
-    [:input.form-control {:type :text}]]
-   [:div.form-group
-    [:label "City: "]
-    [:input.form-control {:type :text}]]
-   [:div.form-group
-    [:label "Offset: "]
-    [:input.form-control {:type :text}]]
-   [:button.btn.btn-default "Add"]])
+(defn tz-add-action []
+  (let [zone (session/get :tz-add)
+        nam (:name zone)
+        city (:city zone)
+        offset (:offset zone)]
+    (when (and nam city offset)  
+      (POST* "/api/timezones" 
+            (assoc zone :offset (int (:offset zone)))
+            #(let [[ok? response] %1]
+              (if ok? 
+                (do
+                  (session/put! :tzones (conj (session/get :tzones []) (js->clj response)))
+                  (session/put! :errors [])) 
+                (session/put! :errors (conj (session/get :errors []) "Could not add tz"))))))))
+
+(defn tz-add-form []
+  (letfn [(change-handler [tz-key]
+            (fn [evt]
+              (let [tz-add (session/get :tz-add {})
+                    input-val (-> evt .-target .-value)]
+                (session/put! :tz-add (assoc tz-add tz-key input-val)))))]  
+    [:div.well [:form.form-inline
+     (inline-input "Name: " :text :name-add (change-handler :name))
+     (inline-input "City: " :text :city-add (change-handler :city))
+     (inline-input "Offset: " :text :offset-add (change-handler :offset))
+     [:button.btn.btn-default {:on-click #(tz-add-action)} "Add"]]]))
+
+(defn usr-add-action []
+  (let [usr (session/get :usr-add)
+        nam (:name usr)
+        email (:email usr)
+        pass (:pass usr)
+        isadm (:isadmin usr)]
+    (when (and nam email pass isadm)  
+      (POST* "/api/users" 
+            (assoc usr :isadmin (not (zero? (int (:isadmin usr)))))
+            #(let [[ok? response] %1]
+              (if ok? 
+                (do
+                  (session/put! :users (conj (session/get :users []) (js->clj response)))
+                  (session/put! :errors [])) 
+                (session/put! :errors (conj (session/get :errors []) "Could not add user"))))))))
+
+(defn usr-add-form []
+  (letfn [(change-handler [usr-key]
+            (fn [evt]
+              (let [usr-add (session/get :usr-add {})
+                    input-val (if (= usr-key :isadmin)
+                                (let [idx (-> evt .-target .-selectedIndex)]
+                                  (.-value (nth (array-seq (-> evt .-target .-options)) idx))) 
+                                (-> evt .-target .-value))]
+                (session/put! :usr-add (assoc usr-add usr-key input-val)))))]  
+    [:div.well [:form.form-inline
+     (inline-input "Email: " :text :email-add (change-handler :email))
+     (inline-input "Is Admin: " :select :isadmin-add (change-handler :isadmin))
+     (inline-input "Name: " :text :name-add (change-handler :name))
+     (inline-input "Password: " :password :pass-add (change-handler :pass))
+     [:button.btn.btn-default {:on-click #(usr-add-action)} "Add"]]]))
 
 (defn login-check []
   (let [login (session/get :login)
@@ -207,11 +263,15 @@
       (map #(let [row %1]
         [:tr {:key (str (get row "id"))} 
          (for [[k col] (sort-by key row) :when (some #{k} headers)]
-           [:td {:key (str k)} 
-            [:input.form-control {:type :text 
-                                  :data-id (get row "id") 
-                                  :name k 
-                                  :value col}]])
+           [:td {:key (str k)}
+            (if (or (identical? true col) (identical? false col))
+              [:select.form-control {:name k :data-id (get row "id") :value (int col)}
+                 [:option {:value 1} "Yes"]
+                 [:option {:value 0} "No"]] 
+              [:input.form-control {:type :text 
+                                    :data-id (get row "id") 
+                                    :name k 
+                                    :value col}])])
          [:td
           [:div.btn-group
            [:button.btn.btn-info {:data-id (get row "id")} "Update"]
@@ -239,10 +299,12 @@
           :tzones
           "Timezones" 
           ["offset" "name" "city"] 
-          "/api/timezones/")        
+          "/api/timezones/") 
+        (tz-add-form)       
         (table :users "Users" 
                ["name" "email" "isadmin"]
-               "/api/users/")])
+               "/api/users/")
+        (usr-add-form)])
     (fn []
       (set! (.-location js/window) "/#/login")
       [:div.container "You are being redirected to the login page"])))

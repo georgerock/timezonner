@@ -74,10 +74,10 @@
                    :body     [tzone (s/maybe TimezoneCreate)]
                    :summary  "Creates a timezone from a submited JSON"                         
                    (let [logged-id (get-in request [:identity :id])]
-                     (if (db/create-timezone! 
+                     (if-let [res (db/create-timezone<! 
                           (merge (select-keys (filter-sec tzone) (keys Timezone)) 
-                                {:addedby logged-id}))
-                       (created (filter-sec tzone))
+                                {:addedby logged-id}))]
+                       (created (assoc (filter-sec tzone) :id (val (first res))))
                        (bad-request))))
             
             (GET* "/:id" {:as request}
@@ -152,10 +152,10 @@
                    :header-params [authorization :- String]
                    :body     [usr (s/maybe UserCreate)]
                    :summary  "Creates a user from a submited JSON"
-                   (if (db/create-user! 
+                   (if-let [res (db/create-user<! 
                          (merge (select-keys (filter-sec usr) (keys UserCreate)) 
-                                {:pass (hashers/encrypt (:pass usr))}))
-                     (created (filter-sec usr))
+                                {:pass (hashers/encrypt (:pass usr))}))]
+                     (created (assoc (filter-sec usr) :id (val (first res))))
                      (bad-request)))
             
             (GET* "/:id" {:as request}
@@ -214,7 +214,7 @@
                    :return   (s/maybe User)
                    :body     [usr (s/maybe UserRegister)]
                    :summary  "Registers a user from a submited JSON"
-                   (if (db/create-user! 
+                   (if (db/create-user<! 
                          (merge (select-keys (filter-sec usr) (keys UserCreate)) 
                                 {:isadmin 0 
                                  :pass (hashers/encrypt (:pass usr))}))
