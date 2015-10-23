@@ -138,6 +138,14 @@
       (sel id handler)
       (input type id handler))])
 
+(defn show-errors []
+  (map #(let [error %1 k %2]
+          [:div.alert.alert-danger 
+           {:role "alert" :key (str "error" k)} 
+           error])
+       (session/get :errors)
+       (range (count (session/get :errors)))))
+
 (defn tz-add-action []
   (let [zone (session/get :tz-add)
         nam (:name zone)
@@ -191,7 +199,7 @@
                                 (-> evt .-target .-value))]
                 (session/put! :usr-add (assoc usr-add usr-key input-val)))))]  
     [:div.well [:form.form-inline
-     (inline-input "Email: " :text :email-add (change-handler :email))
+     (inline-input "Email: " :email :email-add (change-handler :email))
      (inline-input "Is Admin: " :select :isadmin-add (change-handler :isadmin))
      (inline-input "Name: " :text :name-add (change-handler :name))
      (inline-input "Password: " :password :pass-add (change-handler :pass))
@@ -220,8 +228,7 @@
       [:div.row
         [:div.col-md-6.col-md-offset-3 
          [:h3 "Login"]
-         (for [error (session/get :errors)]
-           [:div.alert.alert-danger {:role "alert"} error]) 
+         (show-errors) 
          [:form.form-horizontal
            (horz-input "Email" :email :email (change-handler :email))
            (horz-input "Password" :password :password (change-handler :password))
@@ -293,8 +300,7 @@
                                  :users false nil 
                                  "Could not retrieve users")))
       [:div.container
-        (for [error (session/get :errors)]
-          [:div.alert.alert-danger {:role "alert"} error])
+        (show-errors)
         (table 
           :tzones
           "Timezones" 
@@ -336,6 +342,7 @@
      [:div.row
       [:div.col-md-6.col-md-offset-3
        [:h3 "Register"]
+       (show-errors)
        [:form.form-horizontal
         (horz-input "Name" :name :name (change-handler :name))
         (horz-input "Email" :email :email (change-handler :email))
